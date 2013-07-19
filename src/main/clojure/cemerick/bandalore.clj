@@ -13,8 +13,52 @@
       DeleteMessageRequest DeleteQueueRequest GetQueueAttributesRequest
       ListQueuesRequest Message ReceiveMessageRequest ReceiveMessageResult
       RemovePermissionRequest SendMessageRequest SendMessageResult
-      SetQueueAttributesRequest))
+      SetQueueAttributesRequest)
+    (com.amazonaws.auth.policy
+     Action Condition Policy Principal Resource Statement Statement$Effect)
+    (com.amazonaws.auth.policy.actions
+     SQSActions)
+    (com.amazonaws.auth.policy.conditions
+     BooleanCondition)
+    (com.amazonaws.auth.policy.resources
+     SQSQueueResource))
   (:refer-clojure :exclude (send)))
+
+(comment
+  ;;here is a sample function that creates and SQS Policy for Mechanical Turk notification handling using the JAVA SDK
+
+  ;;this was pieced together from the following:
+  ;;  http://docs.aws.amazon.com/AWSMechTurk/latest/AWSMturkAPI/ApiReference_NotificationReceptorAPI_SQSTransportArticle.html
+  ;;  http://aws.amazon.com/articles/Amazon-S3/3604  Middle of the page SQS Policy example
+
+  ;;The numerical string passed into the Principal Constructor ("755651556756") is the Principal Id for Mechanical Turk
+  ;;The numerical string passed into the SQSQueueResource Constructor ("123456789012") represents the SQS user's Account ID
+  ;;  not to be confused with their Access ID: http://docs.aws.amazon.com/general/latest/gr/acct-identifiers.html
+  (defn sqs-policy "sample sqs policy" [queue-name] (.withStatements (Policy.)
+                                                                     (into-array Statement [
+                                                                                            (.withResources
+                                                                                             (.withConditions
+                                                                                              (.withActions
+                                                                                               (.withPrincipals
+                                                                                                (Statement. (Statement$Effect/Allow))
+                                                                                                (into-array Principal [(Principal. "755651556756")]))
+                                                                                               (into-array Action [SQSActions/SendMessage]))
+                                                                                              (into-array Condition [(BooleanCondition. "aws:SecureTransport" true)]))
+                                                                                             (into-array Resource [(SQSQueueResource. "123456789012" queue-name)]))]))))
+
+
+(defn set-queue-attributes
+  "Set the queue attributes for a particular queue"
+  [^AmazonSQSClient client queue-url attribute-map]
+  (.setQueueAttributes client (SetQueueAttributesRequest. queue-url attribute-map))
+)
+
+(defn get-queue-attributes
+  "Gets the queue attributes"
+  [^AmazonSQSClient client queue-url attr-name-list]
+  (let [q_attr_request (GetQueueAttributesRequest. queue-url)]
+    (.toString (.getAttributes (.getQueueAttributes client (.withAttributeNames q_attr_request attr-name-list)))))
+)
 
 (defn create-client
   "Creates a synchronous AmazonSQSClient using the provided account id, secret key,
@@ -54,7 +98,7 @@
 
 (defn queue-attrs
   "Gets or sets the attributes of a queue specified by its URL string.
-   
+
    When setting attributes on a queue, the attribute map must have String keys
    and values.  Note that the SQS API only supports setting one queue attribute
    per request, so each attribute name/value pair in the provided `attr-map`
@@ -69,7 +113,7 @@
     (doseq [[k v] attr-map]
       (.setQueueAttributes client
         (SetQueueAttributesRequest. queue-url {(str k) (str v)})))))
-         
+
 (defn send
   "Sends a new message with the given string body to the queue specified
    by the string URL.  Returns a map with :id and :body-md5 slots."
@@ -86,7 +130,7 @@
    :id (.getMessageId msg)
    :receipt-handle (.getReceiptHandle msg)
    :source-queue queue-url})
- 
+
 (defn receive
   "Receives one or more messages from the queue specified by the given URL.
    Optionally accepts keyword arguments:
@@ -102,7 +146,7 @@
              See the SQS documentation for all support message attributes.
 
    Returns a seq of maps with these slots:
-   
+
    :attributes - message attributes
    :body - the string body of the message
    :body-md5 - the MD5 checksum of :body
@@ -158,7 +202,7 @@
 
 (defn delete
   "Deletes a message from the queue from which it was received.
-   
+
    The message must be a message map provided by `receive` or `polling-receive`
    if the `queue-url` is not provided explicitly.  Otherwise,
    `message` may be a message map, Message object,
@@ -193,11 +237,11 @@
   (.changeMessageVisibility client
     (ChangeMessageVisibilityRequest.
       queue-url (receipt-handle message) visibility-timeout)))
-           
 
-;; ResponseMetadata 	getCachedResponseMetadata(AmazonWebServiceRequest request)
+
+;; ResponseMetadata   getCachedResponseMetadata(AmazonWebServiceRequest request)
       ;;    Returns additional metadata for a previously executed successful, request, typically used for debugging issues where a service isn't acting as expected.
-;; void 	removePermission(RemovePermissionRequest removePermissionRequest)
+;; void   removePermission(RemovePermissionRequest removePermissionRequest)
 ;           The RemovePermission action revokes any permissions in the queue policy that matches the specified Label parameter.
-;; void 	addPermission(AddPermissionRequest addPermissionRequest)
+;; void   addPermission(AddPermissionRequest addPermissionRequest)
            ;;The AddPermission action adds a permission to a queue for a specific principal.
